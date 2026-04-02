@@ -508,7 +508,7 @@ function exportCSV() {
   var escapeCSV = function(val) {
     if (val === null || val === undefined) return '""';
     var str = String(val);
-    if (str.indexOf(',') >= 0 || str.indexOf('"') >= 0 || str.indexOf('\\n') >= 0) {
+    if (str.indexOf(',') >= 0 || str.indexOf('"') >= 0 || str.indexOf('\n') >= 0) {
       return '"' + str.replace(/"/g, '""') + '"';
     }
     return '"' + str + '"';
@@ -546,7 +546,7 @@ function exportCSV() {
   var totalProfit = totalSale - totalCost;
   csvLines.push(["", escapeCSV("รวมทั้งหมด"), "", "", "", "", "", totalCost, totalSale, totalProfit].join(','));
 
-  var csvContent = "\\uFEFF" + csvLines.join("\\n");
+  var csvContent = "\uFEFF" + csvLines.join("\n");
   var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   var url = URL.createObjectURL(blob);
   
