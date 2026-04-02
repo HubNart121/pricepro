@@ -306,7 +306,188 @@ function showToast(msg) {
 }
 
 // ─── EXPORT ──────────────────────────────────────────────
-function buildPrintTable() {
+
+// Build a self-contained export element with ALL inline styles
+// (html2canvas cannot resolve CSS variables or off-screen fixed elements reliably)
+function createExportElement() {
+  var rows = products.map(calcRow);
+  var s    = calcSummary(rows);
+  var d    = new Date();
+  var dateLabel = d.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // Root container
+  var wrap = document.createElement('div');
+  wrap.style.cssText = [
+    'width:1100px',
+    'padding:32px 36px',
+    'background:#FFFBEB',
+    'font-family:Arial,Helvetica,sans-serif',
+    'font-size:14px',
+    'color:#1C1917',
+    'box-sizing:border-box',
+  ].join(';');
+
+  // Header bar
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:14px;border-bottom:3px solid #F97316;';
+  hdr.innerHTML =
+    '<div style="font-size:20px;font-weight:700;color:#1C1917;">&#9672; PricePro &#8212; &#3619;&#3634;&#3618;&#3591;&#3634;&#3609;&#3619;&#3634;&#3588;&#3634;&#3626;&#3636;&#3609;&#3588;&#3657;&#3634;</div>' +
+    '<div style="font-size:13px;color:#78716C;">' + dateLabel + '</div>';
+  wrap.appendChild(hdr);
+
+  // Table
+  var tbl = document.createElement('table');
+  tbl.style.cssText = 'width:100%;border-collapse:collapse;font-size:13px;';
+
+  // TH style
+  var thS = 'background:#1C1917;color:#FFFBEB;padding:10px 12px;text-align:left;font-size:11px;font-weight:700;letter-spacing:0.5px;white-space:nowrap;';
+  var cols = ['#', 'สินค้า', 'ต้นทุน (฿)', 'ราคาขาย (฿)', 'กำไร (฿)', '%', 'จำนวน', 'ต้นทุนรวม', 'ยอดขาย', 'กำไรรวม'];
+  var thead = '<thead><tr>' +
+    cols.map(function(c) { return '<th style="' + thS + '">' + c + '</th>'; }).join('') +
+    '</tr></thead>';
+  tbl.innerHTML = thead;
+
+  // Body
+  var tbody = document.createElement('tbody');
+  var tdBase = 'padding:8px 12px;border-bottom:1px solid #EDE4C8;';
+  rows.forEach(function(r, i) {
+    var bg    = i % 2 === 0 ? '#FFFFFF' : '#FEF9EC';
+    var pc    = r.profit     >= 0 ? '#16A34A' : '#DC2626';
+    var pac   = r.profitAmount >= 0 ? '#16A34A' : '#DC2626';
+    var mono  = 'font-family:Courier New,monospace;text-align:right;';
+    var tr = document.createElement('tr');
+    tr.style.background = bg;
+    tr.innerHTML =
+      '<td style="' + tdBase + '">'                                + (i + 1)             + '</td>' +
+      '<td style="' + tdBase + 'font-weight:600;">'               + escHtml(r.name)     + '</td>' +
+      '<td style="' + tdBase + mono + 'color:#DC2626;">'          + fmt(r.cost)         + '</td>' +
+      '<td style="' + tdBase + mono + 'color:#1D4ED8;">'          + fmt(r.price)        + '</td>' +
+      '<td style="' + tdBase + mono + 'color:' + pc  + ';font-weight:700;">' + fmt(r.profit)      + '</td>' +
+      '<td style="' + tdBase + mono + '">'                        + fmtPct(r.profitPct) + '</td>' +
+      '<td style="' + tdBase + mono + '">'                        + fmt(r.volume)       + '</td>' +
+      '<td style="' + tdBase + mono + 'color:#DC2626;">'          + fmt(r.costAmount)   + '</td>' +
+      '<td style="' + tdBase + mono + 'color:#1D4ED8;">'          + fmt(r.saleAmount)   + '</td>' +
+      '<td style="' + tdBase + mono + 'color:' + pac + ';font-weight:700;">' + fmt(r.profitAmount) + '</td>';
+    tbody.appendChild(tr);
+  });
+  tbl.appendChild(tbody);
+
+  // Footer summary
+  var ftS   = 'padding:10px 12px;border-top:2px solid #D4C5A0;background:#FEF9EC;font-weight:700;';
+  var mono2 = 'font-family:Courier New,monospace;text-align:right;';
+  var tfoot = document.createElement('tfoot');
+  tfoot.innerHTML =
+    '<tr>' +
+    '  <td colspan="7" style="' + ftS + 'color:#78716C;">รวมทั้งหมด</td>' +
+    '  <td style="' + ftS + mono2 + 'color:#DC2626;">' + fmt(s.totalCost)    + '</td>' +
+    '  <td style="' + ftS + mono2 + 'color:#1D4ED8;">' + fmt(s.totalSale)   + '</td>' +
+    '  <td style="' + ftS + mono2 + 'color:#16A34A;">฿ ' + fmt(s.totalProfit) + '</td>' +
+    '</tr>' +
+    '<tr>' +
+    '  <td colspan="9" style="' + ftS + 'color:#78716C;border-top:none;">อัตรากำไรรวม</td>' +
+    '  <td style="' + ftS + mono2 + 'color:#F97316;border-top:none;">' + fmtPct(s.totalPct) + '</td>' +
+    '</tr>';
+  tbl.appendChild(tfoot);
+  wrap.appendChild(tbl);
+  return wrap;
+}
+
+// Append element to body at top, capture, then remove
+async function captureToCanvas(el) {
+  var shell = document.createElement('div');
+  shell.style.cssText = 'position:absolute;top:0;left:0;z-index:-9999;opacity:0;pointer-events:none;';
+  shell.appendChild(el);
+  document.body.appendChild(shell);
+
+  // Allow layout to settle
+  await new Promise(function(r) { setTimeout(r, 300); });
+
+  var canvas = await html2canvas(el, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#FFFBEB',
+    logging: false,
+    scrollX: 0,
+    scrollY: 0,
+  });
+
+  document.body.removeChild(shell);
+  return canvas;
+}
+
+function dateStr() {
+  var d = new Date();
+  return d.getFullYear() + '' +
+    String(d.getMonth() + 1).padStart(2, '0') +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function setExportLoading(btnId, loading, originalHTML) {
+  var btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) {
+    btn.textContent = '⏳ กำลังสร้าง...';
+  } else if (originalHTML) {
+    btn.innerHTML = originalHTML;
+  }
+}
+
+async function exportPNG() {
+  var btnId = 'btn-export-png';
+  var originalHTML = document.getElementById(btnId).innerHTML;
+  setExportLoading(btnId, true);
+  try {
+    var el     = createExportElement();
+    var canvas = await captureToCanvas(el);
+    var link   = document.createElement('a');
+    link.download = 'PricePro-' + dateStr() + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    showToast('✅ ดาวน์โหลด PNG สำเร็จ');
+  } catch (err) {
+    showToast('❌ Export ล้มเหลว: ' + err.message);
+    console.error('[PricePro] exportPNG error:', err);
+  } finally {
+    setExportLoading(btnId, false, originalHTML);
+  }
+}
+
+async function exportPDF() {
+  var btnId = 'btn-export-pdf';
+  var originalHTML = document.getElementById(btnId).innerHTML;
+  setExportLoading(btnId, true);
+  try {
+    var el     = createExportElement();
+    var canvas = await captureToCanvas(el);
+    var imgData = canvas.toDataURL('image/png');
+
+    var jsPDFLib = window.jspdf;
+    if (!jsPDFLib) throw new Error('jsPDF is not loaded');
+
+    var pdf = new jsPDFLib.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    var pw  = pdf.internal.pageSize.getWidth();
+    var ph  = pdf.internal.pageSize.getHeight();
+    var ratio = canvas.width / canvas.height;
+    var imgW  = pw - 20;
+    var imgH  = imgW / ratio;
+    if (imgH > ph - 20) { imgH = ph - 20; imgW = imgH * ratio; }
+    var x = (pw - imgW) / 2;
+    pdf.addImage(imgData, 'PNG', x, 10, imgW, imgH);
+    pdf.save('PricePro-' + dateStr() + '.pdf');
+    showToast('✅ ดาวน์โหลด PDF สำเร็จ');
+  } catch (err) {
+    showToast('❌ Export ล้มเหลว: ' + err.message);
+    console.error('[PricePro] exportPDF error:', err);
+  } finally {
+    setExportLoading(btnId, false, originalHTML);
+  }
+}
+
+// ─── Boot ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+
   var rows = products.map(calcRow);
   var s    = calcSummary(rows);
 
