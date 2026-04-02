@@ -531,11 +531,11 @@ function exportCSV() {
       row.cost,
       row.price,
       row.profit,
-      row.pctStr.replace('%', ''),
+      row.profitPct.toFixed(2),
       row.volume,
-      row.costAmt,
-      row.saleAmt,
-      row.profitAmt
+      row.costAmount,
+      row.saleAmount,
+      row.profitAmount
     ];
     csvLines.push(rowData.map(escapeCSV).join(','));
   });
