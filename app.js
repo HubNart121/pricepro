@@ -536,7 +536,7 @@ function exportCSV() {
       row.price,
       row.profit,
       row.profitPct.toFixed(2),
-      row.volume,
+      Number(row.volume).toLocaleString('en-US'),
       fmtCSV(row.costAmount),
       fmtCSV(row.saleAmount),
       fmtCSV(row.profitAmount)
