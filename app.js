@@ -1,0 +1,425 @@
+/* =====================================================
+   PricePro — app.js
+   State management, CRUD, calculations, rendering, export
+   ===================================================== */
+'use strict';
+
+// ─── Constants ──────────────────────────────────────────
+const STORAGE_KEY = 'pricepro-v1';
+
+const SAMPLE = [
+  { name: 'A', cost: 15,  price: 30, volume: 1000 },
+  { name: 'B', cost: 10,  price: 25, volume: 1000 },
+  { name: 'C', cost: 9,   price: 10, volume: 1000 },
+  { name: 'D', cost: 12,  price: 25, volume: 1000 },
+  { name: 'E', cost: 45,  price: 70, volume: 1000 },
+  { name: 'F', cost: 50,  price: 80, volume: 1000 },
+  { name: 'G', cost: 60,  price: 85, volume: 1000 },
+];
+
+// ─── State ──────────────────────────────────────────────
+var products = [];
+var nextId   = 1;
+
+// ─── Init ───────────────────────────────────────────────
+function init() {
+  var saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      var data = JSON.parse(saved);
+      products = data.products || [];
+      nextId   = data.nextId   || (products.length + 1);
+    } catch (_) {
+      loadSample();
+    }
+  } else {
+    loadSample();
+  }
+  render();
+}
+
+function loadSample() {
+  products = SAMPLE.map(function(s, i) {
+    return Object.assign({ id: i + 1 }, s);
+  });
+  nextId = products.length + 1;
+}
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ products: products, nextId: nextId }));
+}
+
+// ─── Calculations ────────────────────────────────────────
+function calcRow(p) {
+  var profit      = p.price - p.cost;
+  var profitPct   = p.price > 0 ? (profit / p.price * 100) : 0;
+  var costAmount  = p.cost   * p.volume;
+  var saleAmount  = p.price  * p.volume;
+  var profitAmount = profit  * p.volume;
+  return Object.assign({}, p, { profit: profit, profitPct: profitPct, costAmount: costAmount, saleAmount: saleAmount, profitAmount: profitAmount });
+}
+
+function calcSummary(rows) {
+  var totalCost   = rows.reduce(function(s, r) { return s + r.costAmount;   }, 0);
+  var totalSale   = rows.reduce(function(s, r) { return s + r.saleAmount;   }, 0);
+  var totalProfit = rows.reduce(function(s, r) { return s + r.profitAmount; }, 0);
+  var totalPct    = totalSale > 0 ? (totalProfit / totalSale * 100) : 0;
+  return { totalCost: totalCost, totalSale: totalSale, totalProfit: totalProfit, totalPct: totalPct };
+}
+
+// ─── Formatting ──────────────────────────────────────────
+function fmt(n) {
+  return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function fmtPct(n) {
+  return Number(n).toFixed(0) + '%';
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/"/g,  '&quot;')
+    .replace(/'/g,  '&#39;');
+}
+
+// ─── CRUD ────────────────────────────────────────────────
+function addProduct() {
+  var p = { id: nextId++, name: 'สินค้าใหม่', cost: 0, price: 0, volume: 1 };
+  products.push(p);
+  save();
+  render();
+  // Auto-focus new name input
+  setTimeout(function() {
+    var input = document.querySelector('tr[data-id="' + p.id + '"] .input-name');
+    if (input) { input.focus(); input.select(); return; }
+    var card = document.querySelector('.product-card[data-id="' + p.id + '"] .card-name-input');
+    if (card)  { card.focus();  card.select(); }
+  }, 60);
+  showToast('✅ เพิ่มสินค้าใหม่แล้ว');
+}
+
+function deleteProduct(id) {
+  products = products.filter(function(p) { return p.id !== id; });
+  save();
+  render();
+  showToast('🗑 ลบสินค้าแล้ว');
+}
+
+function updateField(id, field, rawValue) {
+  var p = products.find(function(p) { return p.id === id; });
+  if (!p) return;
+  if (field === 'name') {
+    p[field] = rawValue;
+  } else {
+    var num = parseFloat(rawValue);
+    p[field] = isNaN(num) || num < 0 ? 0 : num;
+  }
+  save();
+  refreshRow(id);
+  updateSummary();
+}
+
+// ─── Render ──────────────────────────────────────────────
+function render() {
+  var rows = products.map(calcRow);
+  renderTable(rows);
+  renderCards(rows);
+  updateSummary();
+  document.getElementById('product-count').textContent = products.length + ' รายการ';
+  var isEmpty = products.length === 0;
+  document.getElementById('empty-state').style.display = isEmpty ? 'flex' : 'none';
+}
+
+function renderTable(rows) {
+  var tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+  rows.forEach(function(r, idx) {
+    var tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    tr.style.animationDelay = (idx * 0.04) + 's';
+    tr.innerHTML = buildRowHTML(r, idx);
+    tbody.appendChild(tr);
+  });
+}
+
+function buildRowHTML(r, idx) {
+  var profitClass    = r.profit     >= 0 ? 'profit' : 'loss';
+  var profitAmtClass = r.profitAmount >= 0 ? 'profit' : 'loss';
+  return (
+    '<td class="col-no">' + (idx + 1) + '</td>' +
+    '<td class="col-name"><input class="cell-input input-name" value="' + escHtml(r.name) + '"' +
+    '  onchange="updateField(' + r.id + ',\'name\',this.value)"' +
+    '  onblur="updateField(' + r.id + ',\'name\',this.value)"' +
+    '  aria-label="ชื่อสินค้า"></td>' +
+    '<td class="col-cost"><input class="cell-input input-num cost-color" type="number" min="0" step="0.01" value="' + r.cost + '"' +
+    '  oninput="updateField(' + r.id + ',\'cost\',this.value)"' +
+    '  aria-label="ต้นทุน"></td>' +
+    '<td class="col-price"><input class="cell-input input-num price-color" type="number" min="0" step="0.01" value="' + r.price + '"' +
+    '  oninput="updateField(' + r.id + ',\'price\',this.value)"' +
+    '  aria-label="ราคาขาย"></td>' +
+    '<td class="col-profit"><span class="cell-profit num ' + profitClass + '">' + fmt(r.profit) + '</span></td>' +
+    '<td class="col-pct"><span class="cell-pct num">' + fmtPct(r.profitPct) + '</span></td>' +
+    '<td class="col-volume"><input class="cell-input input-num" type="number" min="0" step="1" value="' + r.volume + '"' +
+    '  oninput="updateField(' + r.id + ',\'volume\',this.value)"' +
+    '  aria-label="จำนวน"></td>' +
+    '<td class="col-costamt desktop-only"><span class="cell-costamt num cost-color">' + fmt(r.costAmount) + '</span></td>' +
+    '<td class="col-saleamt desktop-only"><span class="cell-saleamt num price-color">' + fmt(r.saleAmount) + '</span></td>' +
+    '<td class="col-profitamt desktop-only"><span class="cell-profitamt num ' + profitAmtClass + '">' + fmt(r.profitAmount) + '</span></td>' +
+    '<td class="col-action"><button class="btn-delete" onclick="deleteProduct(' + r.id + ')" aria-label="ลบ ' + escHtml(r.name) + '">✕</button></td>'
+  );
+}
+
+function renderCards(rows) {
+  var wrapper = document.getElementById('cards-wrapper');
+  wrapper.innerHTML = '';
+  rows.forEach(function(r, idx) {
+    var card = document.createElement('div');
+    card.className  = 'product-card';
+    card.dataset.id = r.id;
+    card.style.animationDelay = (idx * 0.06) + 's';
+    card.innerHTML  = buildCardHTML(r, idx);
+    wrapper.appendChild(card);
+  });
+}
+
+function buildCardHTML(r, idx) {
+  var profitClass    = r.profit     >= 0 ? 'profit' : 'loss';
+  var profitAmtClass = r.profitAmount >= 0 ? 'profit' : 'loss';
+  return (
+    '<div class="card-header">' +
+    '  <div class="card-no">' + (idx + 1) + '</div>' +
+    '  <input class="card-name-input" value="' + escHtml(r.name) + '"' +
+    '    onchange="updateField(' + r.id + ',\'name\',this.value)"' +
+    '    aria-label="ชื่อสินค้า">' +
+    '  <button class="btn-delete-card" onclick="deleteProduct(' + r.id + ')" aria-label="ลบ">✕</button>' +
+    '</div>' +
+    '<div class="card-body">' +
+    '  <div class="card-row">' +
+    '    <div class="card-field">' +
+    '      <label>ต้นทุน (฿)</label>' +
+    '      <input class="card-input cost-color" type="number" min="0" step="0.01" value="' + r.cost + '"' +
+    '        oninput="updateField(' + r.id + ',\'cost\',this.value)">' +
+    '    </div>' +
+    '    <div class="card-field">' +
+    '      <label>ราคาขาย (฿)</label>' +
+    '      <input class="card-input price-color" type="number" min="0" step="0.01" value="' + r.price + '"' +
+    '        oninput="updateField(' + r.id + ',\'price\',this.value)">' +
+    '    </div>' +
+    '    <div class="card-field">' +
+    '      <label>จำนวน</label>' +
+    '      <input class="card-input" type="number" min="0" step="1" value="' + r.volume + '"' +
+    '        oninput="updateField(' + r.id + ',\'volume\',this.value)">' +
+    '    </div>' +
+    '  </div>' +
+    '  <div class="card-computed">' +
+    '    <div class="card-computed-item">' +
+    '      <span class="card-computed-label">กำไร</span>' +
+    '      <span class="card-profit ' + profitClass + '">฿ ' + fmt(r.profit) + '</span>' +
+    '    </div>' +
+    '    <div class="card-computed-item">' +
+    '      <span class="card-computed-label">%</span>' +
+    '      <span class="card-pct">' + fmtPct(r.profitPct) + '</span>' +
+    '    </div>' +
+    '  </div>' +
+    '  <div class="card-amounts">' +
+    '    <div class="card-amount-item">' +
+    '      <span class="card-computed-label">ต้นทุนรวม</span>' +
+    '      <span class="card-costamt cost-color">฿ ' + fmt(r.costAmount) + '</span>' +
+    '    </div>' +
+    '    <div class="card-amount-item">' +
+    '      <span class="card-computed-label">ยอดขาย</span>' +
+    '      <span class="card-saleamt price-color">฿ ' + fmt(r.saleAmount) + '</span>' +
+    '    </div>' +
+    '    <div class="card-amount-item">' +
+    '      <span class="card-computed-label">กำไรรวม</span>' +
+    '      <span class="card-profitamt ' + profitAmtClass + '">฿ ' + fmt(r.profitAmount) + '</span>' +
+    '    </div>' +
+    '  </div>' +
+    '</div>'
+  );
+}
+
+// ─── Incremental DOM update (fast path) ──────────────────
+function refreshRow(id) {
+  var p = products.find(function(p) { return p.id === id; });
+  if (!p) return;
+  var r = calcRow(p);
+
+  // Update table row
+  var tr = document.querySelector('tr[data-id="' + id + '"]');
+  if (tr) {
+    var profitClass    = r.profit     >= 0 ? 'profit' : 'loss';
+    var profitAmtClass = r.profitAmount >= 0 ? 'profit' : 'loss';
+    tr.querySelector('.cell-profit').textContent    = fmt(r.profit);
+    tr.querySelector('.cell-profit').className      = 'cell-profit num ' + profitClass;
+    tr.querySelector('.cell-pct').textContent       = fmtPct(r.profitPct);
+    tr.querySelector('.cell-costamt').textContent   = fmt(r.costAmount);
+    tr.querySelector('.cell-saleamt').textContent   = fmt(r.saleAmount);
+    tr.querySelector('.cell-profitamt').textContent = fmt(r.profitAmount);
+    tr.querySelector('.cell-profitamt').className   = 'cell-profitamt num ' + profitAmtClass;
+  }
+
+  // Update card
+  var card = document.querySelector('.product-card[data-id="' + id + '"]');
+  if (card) {
+    var pClass = r.profit >= 0 ? 'profit' : 'loss';
+    var paClass = r.profitAmount >= 0 ? 'profit' : 'loss';
+    card.querySelector('.card-profit').textContent    = '฿ ' + fmt(r.profit);
+    card.querySelector('.card-profit').className      = 'card-profit ' + pClass;
+    card.querySelector('.card-pct').textContent       = fmtPct(r.profitPct);
+    card.querySelector('.card-costamt').textContent   = '฿ ' + fmt(r.costAmount);
+    card.querySelector('.card-saleamt').textContent   = '฿ ' + fmt(r.saleAmount);
+    card.querySelector('.card-profitamt').textContent = '฿ ' + fmt(r.profitAmount);
+    card.querySelector('.card-profitamt').className   = 'card-profitamt ' + paClass;
+  }
+}
+
+// ─── Summary ─────────────────────────────────────────────
+function updateSummary() {
+  var rows = products.map(calcRow);
+  var s    = calcSummary(rows);
+  setAnimVal('sum-total-cost',   '฿ ' + fmt(s.totalCost));
+  setAnimVal('sum-total-sale',   '฿ ' + fmt(s.totalSale));
+  setAnimVal('sum-total-profit', '฿ ' + fmt(s.totalProfit));
+  setAnimVal('sum-total-pct',    fmtPct(s.totalPct));
+}
+
+function setAnimVal(id, text) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove('pulse');
+  void el.offsetWidth; // reflow to restart animation
+  el.classList.add('pulse');
+  setTimeout(function() { el.classList.remove('pulse'); }, 600);
+}
+
+// ─── Toast ───────────────────────────────────────────────
+function showToast(msg) {
+  var toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(function() { toast.classList.remove('show'); }, 2200);
+}
+
+// ─── EXPORT ──────────────────────────────────────────────
+function buildPrintTable() {
+  var rows = products.map(calcRow);
+  var s    = calcSummary(rows);
+
+  var d = new Date();
+  document.getElementById('print-date').textContent =
+    d.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  var tbody = document.getElementById('print-body');
+  tbody.innerHTML = '';
+  rows.forEach(function(r, i) {
+    var profitClass    = r.profit     >= 0 ? 'profit' : 'loss';
+    var profitAmtClass = r.profitAmount >= 0 ? 'profit' : 'loss';
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + (i + 1) + '</td>' +
+      '<td>' + escHtml(r.name) + '</td>' +
+      '<td class="num cost-color">฿ ' + fmt(r.cost)         + '</td>' +
+      '<td class="num price-color">฿ ' + fmt(r.price)       + '</td>' +
+      '<td class="num ' + profitClass    + '">฿ ' + fmt(r.profit)       + '</td>' +
+      '<td class="num">'                  + fmtPct(r.profitPct)         + '</td>' +
+      '<td class="num">'                  + fmt(r.volume)               + '</td>' +
+      '<td class="num cost-color">'       + fmt(r.costAmount)           + '</td>' +
+      '<td class="num price-color">'      + fmt(r.saleAmount)           + '</td>' +
+      '<td class="num ' + profitAmtClass + '">฿ ' + fmt(r.profitAmount) + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  var tfoot = document.getElementById('print-footer');
+  tfoot.innerHTML =
+    '<tr class="print-summary-row">' +
+    '  <td colspan="7" class="print-summary-label">รวมทั้งหมด</td>' +
+    '  <td class="num cost-color">'  + fmt(s.totalCost)    + '</td>' +
+    '  <td class="num price-color">' + fmt(s.totalSale)   + '</td>' +
+    '  <td class="num profit">฿ '    + fmt(s.totalProfit) + '</td>' +
+    '</tr>' +
+    '<tr class="print-pct-row">' +
+    '  <td colspan="9" class="print-summary-label">อัตรากำไรรวม</td>' +
+    '  <td class="num profit">'      + fmtPct(s.totalPct) + '</td>' +
+    '</tr>';
+}
+
+function dateStr() {
+  var d = new Date();
+  return d.getFullYear() + '' +
+    String(d.getMonth() + 1).padStart(2, '0') +
+    String(d.getDate()).padStart(2, '0');
+}
+
+function setExportLoading(btnId, loading, originalHTML) {
+  var btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.textContent = loading ? '⏳ กำลังสร้าง...' : '';
+  if (!loading) btn.innerHTML = originalHTML;
+}
+
+async function exportPNG() {
+  var btnId = 'btn-export-png';
+  var originalHTML = document.getElementById(btnId).innerHTML;
+  setExportLoading(btnId, true);
+  buildPrintTable();
+  var printArea = document.getElementById('print-area');
+  printArea.style.display = 'block';
+  try {
+    var canvas = await html2canvas(printArea, {
+      scale: 2, useCORS: true, backgroundColor: '#FFFBEB', logging: false
+    });
+    var link = document.createElement('a');
+    link.download = 'PricePro-' + dateStr() + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    showToast('✅ ดาวน์โหลด PNG สำเร็จ');
+  } catch (err) {
+    showToast('❌ Export ล้มเหลว: ' + err.message);
+    console.error(err);
+  } finally {
+    printArea.style.display = 'none';
+    setExportLoading(btnId, false, originalHTML);
+  }
+}
+
+async function exportPDF() {
+  var btnId = 'btn-export-pdf';
+  var originalHTML = document.getElementById(btnId).innerHTML;
+  setExportLoading(btnId, true);
+  buildPrintTable();
+  var printArea = document.getElementById('print-area');
+  printArea.style.display = 'block';
+  try {
+    var canvas = await html2canvas(printArea, {
+      scale: 2, useCORS: true, backgroundColor: '#FFFBEB', logging: false
+    });
+    var imgData  = canvas.toDataURL('image/png');
+    var jsPDFLib = window.jspdf;
+    var pdf      = new jsPDFLib.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    var pw = pdf.internal.pageSize.getWidth();
+    var ph = pdf.internal.pageSize.getHeight();
+    var ratio = canvas.width / canvas.height;
+    var imgW  = pw - 20;
+    var imgH  = imgW / ratio;
+    if (imgH > ph - 20) { imgH = ph - 20; imgW = imgH * ratio; }
+    var x = (pw - imgW) / 2;
+    pdf.addImage(imgData, 'PNG', x, 10, imgW, imgH);
+    pdf.save('PricePro-' + dateStr() + '.pdf');
+    showToast('✅ ดาวน์โหลด PDF สำเร็จ');
+  } catch (err) {
+    showToast('❌ Export ล้มเหลว: ' + err.message);
+    console.error(err);
+  } finally {
+    printArea.style.display = 'none';
+    setExportLoading(btnId, false, originalHTML);
+  }
+}
+
+// ─── Boot ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
