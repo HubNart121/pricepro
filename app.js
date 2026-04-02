@@ -544,7 +544,8 @@ function exportCSV() {
   var totalCost = products.reduce(function(sum, p) { return sum + (p.cost * p.volume); }, 0);
   var totalSale = products.reduce(function(sum, p) { return sum + (p.price * p.volume); }, 0);
   var totalProfit = totalSale - totalCost;
-  csvLines.push(["", escapeCSV("รวมทั้งหมด"), "", "", "", "", "", totalCost, totalSale, totalProfit].join(','));
+  var totalPct = totalSale > 0 ? (totalProfit / totalSale * 100) : 0;
+  csvLines.push(["", escapeCSV("รวมทั้งหมด"), "", "", "", escapeCSV(totalPct.toFixed(2)), "", totalCost, totalSale, totalProfit].join(','));
 
   var csvContent = "\uFEFF" + csvLines.join("\n");
   var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
