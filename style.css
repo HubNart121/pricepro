@@ -736,33 +736,53 @@ body {
 /* Tablet: 640px – 1023px */
 @media (max-width: 1023px) {
   .desktop-only { display: none !important; }
-  .summary-value { font-size: 22px; }
+  .summary-value { font-size: 24px; }
+  
+  /* Increase table text for easier reading on Tablet */
+  .product-table th { font-size: 12px; padding: 14px 12px; }
+  .cell-input { font-size: 16px; padding: 6px 6px; }
+  .input-num, .num { font-size: 15px; }
+  .col-no { font-size: 14px; }
+  .btn-delete { width: 36px; height: 36px; font-size: 16px; }
 }
 
 /* Mobile: < 640px */
 @media (max-width: 639px) {
   .header-inner { padding: 0 14px; }
+  .brand-name { font-size: 20px; }
   .brand-tagline { display: none; }
 
   .btn-label { display: none; }
   .btn { padding: 8px 10px; }
+  .btn-primary { padding: 10px 14px; font-size: 15px; }
 
   .app-main { padding: 16px 12px 60px; gap: 16px; }
 
   .summary-grid {
     grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 12px;
   }
 
-  .summary-value { font-size: 18px; }
-  .summary-card-inner { padding: 14px 14px 12px; }
+  .summary-label { font-size: 13px; }
+  .summary-value { font-size: 22px; }
+  .summary-card-inner { padding: 16px 14px 14px; }
 
   /* Hide table, show cards */
   .table-wrapper { display: none; }
-  .cards-wrapper  { display: flex; }
+  .cards-wrapper  { display: flex; gap: 16px; }
 
-  .table-toolbar { padding: 12px 14px; }
-  .section-title { font-size: 15px; }
+  .table-toolbar { padding: 14px 14px; }
+  .section-title { font-size: 18px; }
+  
+  /* Enlarge card typography */
+  .card-no { font-size: 14px; min-width: 30px; height: 30px; }
+  .card-name-input { font-size: 18px; padding: 4px; }
+  .card-field label, .card-computed-label { font-size: 12px; margin-bottom: 2px; }
+  
+  /* 16px input fonts prevent auto-zoom on iOS Safari */
+  .card-input { font-size: 16px; padding: 10px 12px; }
+  .card-profit, .card-pct, .card-costamt, .card-saleamt, .card-profitamt { font-size: 16px; }
+  .btn-delete-card { font-size: 16px; padding: 8px 12px; }
 }
 
 /* Large desktop */
