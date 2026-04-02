@@ -20,6 +20,7 @@ const SAMPLE = [
 // ─── State ──────────────────────────────────────────────
 var products = [];
 var nextId   = 1;
+var metaInfo = { projectName: '', customerName: '' };
 
 // ─── Init ───────────────────────────────────────────────
 function init() {
@@ -29,6 +30,7 @@ function init() {
       var data = JSON.parse(saved);
       products = data.products || [];
       nextId   = data.nextId   || (products.length + 1);
+      metaInfo = data.metaInfo || { projectName: '', customerName: '' };
     } catch (_) {
       loadSample();
     }
@@ -46,7 +48,7 @@ function loadSample() {
 }
 
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ products: products, nextId: nextId }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ products: products, nextId: nextId, metaInfo: metaInfo }));
 }
 
 // ─── Calculations ────────────────────────────────────────
@@ -83,6 +85,11 @@ function escHtml(str) {
     .replace(/>/g,  '&gt;')
     .replace(/"/g,  '&quot;')
     .replace(/'/g,  '&#39;');
+}
+
+function updateMeta(field, val) {
+  metaInfo[field] = val;
+  save();
 }
 
 // ─── CRUD ────────────────────────────────────────────────
@@ -124,6 +131,9 @@ function updateField(id, field, rawValue) {
 
 // ─── Render ──────────────────────────────────────────────
 function render() {
+  document.getElementById('project-name').value = metaInfo.projectName;
+  document.getElementById('customer-name').value = metaInfo.customerName;
+
   var rows = products.map(calcRow);
   renderTable(rows);
   renderCards(rows);
@@ -329,10 +339,17 @@ function createExportElement() {
 
   // Header bar
   var hdr = document.createElement('div');
-  hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;padding-bottom:14px;border-bottom:3px solid #F97316;';
-  hdr.innerHTML =
-    '<div style="font-size:20px;font-weight:700;color:#1C1917;">&#9672; PricePro &#8212; &#3619;&#3634;&#3618;&#3591;&#3634;&#3609;&#3619;&#3634;&#3588;&#3634;&#3626;&#3636;&#3609;&#3588;&#3657;&#3634;</div>' +
-    '<div style="font-size:13px;color:#78716C;">' + dateLabel + '</div>';
+  hdr.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;padding-bottom:14px;border-bottom:3px solid #F97316;';
+  
+  var leftHTML = '<div style="font-size:24px;font-weight:700;color:#1C1917;line-height:1.2;">&#9672; PricePro</div>';
+  if (metaInfo.projectName) {
+    leftHTML += '<div style="font-size:16px;font-weight:600;color:#1C1917;margin-top:6px;">Project: <span style="color:#F97316;">' + escHtml(metaInfo.projectName) + '</span></div>';
+  }
+  if (metaInfo.customerName) {
+    leftHTML += '<div style="font-size:14px;font-weight:600;color:#78716C;margin-top:4px;">Customer: ' + escHtml(metaInfo.customerName) + '</div>';
+  }
+  
+  hdr.innerHTML = '<div>' + leftHTML + '</div><div style="text-align:right;"><div style="font-size:13px;color:#78716C;font-weight:600;">' + dateLabel + '</div></div>';
   wrap.appendChild(hdr);
 
   // Table
@@ -485,6 +502,41 @@ async function exportPDF() {
   }
 }
 
+function exportData() {
+  var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ products: products, nextId: nextId, metaInfo: metaInfo }, null, 2));
+  var link = document.createElement('a');
+  link.setAttribute("href", dataStr);
+  link.setAttribute("download", "PricePro-Backup-" + dateStr() + ".json");
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  showToast('✅ ดาวน์โหลดข้อมูลสำเร็จ');
+}
+
+function importData(event) {
+  var file = event.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var data = JSON.parse(e.target.result);
+      if (data.products && Array.isArray(data.products)) {
+        products = data.products;
+        nextId = data.nextId || (products.length + 1);
+        metaInfo = data.metaInfo || { projectName: '', customerName: '' };
+        save();
+        render();
+        showToast('📂 นำเข้าข้อมูลสำเร็จ');
+      } else {
+        throw new Error('Invalid format');
+      }
+    } catch(err) {
+      showToast('❌ ไฟล์ไม่ถูกต้อง');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = ''; // reset input
+}
+
 // ─── Boot ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
-
