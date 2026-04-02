@@ -115,6 +115,17 @@ function deleteProduct(id) {
   showToast('🗑 ลบสินค้าแล้ว');
 }
 
+function clearAllData() {
+  if (confirm('คุณต้องการรีเซ็ตและล้างข้อมูลสินค้าทั้งหมดใช่หรือไม่? (ข้อมูลชื่อโปรเจกต์และชื่อลูกค้าจะถูกลบไปด้วย)')) {
+    products = [];
+    nextId = 1;
+    metaInfo = { projectName: '', customerName: '' };
+    save();
+    render();
+    showToast('🗑 ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว');
+  }
+}
+
 function updateField(id, field, rawValue) {
   var p = products.find(function(p) { return p.id === id; });
   if (!p) return;
