@@ -502,6 +502,64 @@ async function exportPDF() {
   }
 }
 
+function exportCSV() {
+  var csvLines = [];
+  
+  var escapeCSV = function(val) {
+    if (val === null || val === undefined) return '""';
+    var str = String(val);
+    if (str.indexOf(',') >= 0 || str.indexOf('"') >= 0 || str.indexOf('\\n') >= 0) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return '"' + str + '"';
+  };
+
+  csvLines.push(escapeCSV("PricePro Report"));
+  if (metaInfo.projectName) csvLines.push(escapeCSV("Project:") + "," + escapeCSV(metaInfo.projectName));
+  if (metaInfo.customerName) csvLines.push(escapeCSV("Customer:") + "," + escapeCSV(metaInfo.customerName));
+  csvLines.push(escapeCSV("Date:") + "," + escapeCSV(dateStr()));
+  csvLines.push("");
+
+  var headers = ["#", "สินค้า", "ต้นทุน (฿)", "ราคาขาย (฿)", "กำไร (฿)", "%", "จำนวน", "ต้นทุนรวม (฿)", "ยอดขาย (฿)", "กำไรรวม (฿)"];
+  csvLines.push(headers.map(escapeCSV).join(','));
+
+  products.forEach(function(p, idx) {
+    var row = calcRow(p);
+    var rowData = [
+      idx + 1,
+      row.name,
+      row.cost,
+      row.price,
+      row.profit,
+      row.pctStr.replace('%', ''),
+      row.volume,
+      row.costAmt,
+      row.saleAmt,
+      row.profitAmt
+    ];
+    csvLines.push(rowData.map(escapeCSV).join(','));
+  });
+
+  // add summary line
+  var totalCost = products.reduce(function(sum, p) { return sum + (p.cost * p.volume); }, 0);
+  var totalSale = products.reduce(function(sum, p) { return sum + (p.price * p.volume); }, 0);
+  var totalProfit = totalSale - totalCost;
+  csvLines.push(["", escapeCSV("รวมทั้งหมด"), "", "", "", "", "", totalCost, totalSale, totalProfit].join(','));
+
+  var csvContent = "\\uFEFF" + csvLines.join("\\n");
+  var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  
+  var link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", "PricePro-" + dateStr() + ".csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  
+  showToast('✅ ดาวน์โหลด CSV สำเร็จ');
+}
+
 function exportData() {
   var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ products: products, nextId: nextId, metaInfo: metaInfo }, null, 2));
   var link = document.createElement('a');
