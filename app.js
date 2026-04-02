@@ -523,6 +523,10 @@ function exportCSV() {
   var headers = ["#", "สินค้า", "ต้นทุน (฿)", "ราคาขาย (฿)", "กำไร (฿)", "%", "จำนวน", "ต้นทุนรวม (฿)", "ยอดขาย (฿)", "กำไรรวม (฿)"];
   csvLines.push(headers.map(escapeCSV).join(','));
 
+  var fmtCSV = function(n) {
+    return '฿ ' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
   products.forEach(function(p, idx) {
     var row = calcRow(p);
     var rowData = [
@@ -533,9 +537,9 @@ function exportCSV() {
       row.profit,
       row.profitPct.toFixed(2),
       row.volume,
-      row.costAmount,
-      row.saleAmount,
-      row.profitAmount
+      fmtCSV(row.costAmount),
+      fmtCSV(row.saleAmount),
+      fmtCSV(row.profitAmount)
     ];
     csvLines.push(rowData.map(escapeCSV).join(','));
   });
@@ -545,7 +549,7 @@ function exportCSV() {
   var totalSale = products.reduce(function(sum, p) { return sum + (p.price * p.volume); }, 0);
   var totalProfit = totalSale - totalCost;
   var totalPct = totalSale > 0 ? (totalProfit / totalSale * 100) : 0;
-  csvLines.push(["", escapeCSV("รวมทั้งหมด"), "", "", "", escapeCSV(totalPct.toFixed(2)), "", totalCost, totalSale, totalProfit].join(','));
+  csvLines.push(["", escapeCSV("รวมทั้งหมด"), "", "", "", escapeCSV(totalPct.toFixed(2)), "", escapeCSV(fmtCSV(totalCost)), escapeCSV(fmtCSV(totalSale)), escapeCSV(fmtCSV(totalProfit))].join(','));
 
   var csvContent = "\uFEFF" + csvLines.join("\n");
   var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
